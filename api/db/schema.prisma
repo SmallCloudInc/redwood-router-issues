@@ -1,0 +1,293 @@
+datasource DS {
+  // optionally set multiple providers
+  // example: provider = ["sqlite", "postgresql"]
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native"]
+}
+
+// USER is unused
+enum RoleType {
+  USER
+  ADMIN
+  CUSTOMER
+}
+
+model User {
+  id String @id @default(cuid())
+
+  email String @unique
+  // unique identifier
+  sub   String @unique
+
+  name String?
+
+  imageUrl String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  role RoleType
+
+  RoadmapItemVote    RoadmapItemVote[]
+  RoadmapItemComment RoadmapItemComment[]
+  RoadmapItem        RoadmapItem[]
+
+  ownerOfTeam Team? @relation("TeamOwner")
+
+  contactOfTeam Team?   @relation("TeamContacts", fields: [contactTeamId], references: [id])
+  contactTeamId String?
+
+  adminOfTeam Team?   @relation("TeamAdmins", fields: [adminTeamId], references: [id])
+  adminTeamId String?
+
+  submittedFeedback Feedback[] @relation("submittedFeedback")
+  requestedFeedback Feedback[] @relation("requestedFeedback")
+}
+
+enum FeedbackType {
+  IDEA
+  ISSUE
+  OTHER
+}
+
+enum SourceType {
+  SLACK
+  CHROME
+  INTERCOM
+  API
+  PORTAL
+  ADMIN
+}
+
+model Feedback {
+  id              String            @id @default(cuid())
+  text            String
+  createdAt       DateTime          @default(now())
+  type            FeedbackType
+  Team            Team?             @relation(fields: [teamId], references: [id])
+  teamId          String?
+  submitter       User?             @relation("submittedFeedback", fields: [userId], references: [id])
+  userId          String?
+  contact         User?             @relation("requestedFeedback", fields: [contactId], references: [id])
+  contactId       String?
+  roadmapItem     RoadmapItem?      @relation(fields: [roadmapId], references: [id])
+  roadmapId       String?
+  metadata        Json?
+  originalUrl     String?
+  sourceType      SourceType        @default(ADMIN)
+  RoadmapItemVote RoadmapItemVote[]
+}
+
+// use lodash startcase "UnderReview" -> "Under Review"
+enum RoadmapStatusTypes {
+  Open
+  UnderReview
+  Planned
+  InProgress
+  Complete
+  Closed
+}
+
+// make name unique to each team
+model RoadmapItemCategory {
+  id   String @id @default(cuid())
+  name String
+
+  Roadmap     Roadmap?      @relation(fields: [roadmapId], references: [id])
+  roadmapId   String?
+  RoadmapItem RoadmapItem[]
+  Team        Team?         @relation(fields: [teamId], references: [id])
+  teamId      String?
+}
+
+model RoadmapItemVote {
+  id             String      @id @default(cuid())
+  user           User?       @relation(fields: [feedbackUserId], references: [id])
+  feedbackUserId String?
+  comment        String?
+  feedback       Feedback?   @relation(fields: [feedbackId], references: [id])
+  feedbackId     String?
+  roadmapItem    RoadmapItem @relation(fields: [roadmapId], references: [id])
+  roadmapId      String
+  voterEmail     String?
+  voterName      String?
+  updatedAt      DateTime    @default(now()) @updatedAt
+}
+
+model RoadmapItemComment {
+  id                 String               @id @default(cuid())
+  user               User                 @relation(fields: [userId], references: [id])
+  userId             String
+  comment            String?
+  roadmapItem        RoadmapItem          @relation(fields: [roadmapId], references: [id])
+  roadmapId          String
+  roadmapSlug        String
+  teamId             String
+  updatedAt          DateTime             @default(now()) @updatedAt
+  parentCommentId    String?
+  parentComment      RoadmapItemComment?  @relation("CommentParent", fields: [parentCommentId], references: [id])
+  RoadmapItemComment RoadmapItemComment[] @relation("CommentParent")
+}
+
+// add unique slug for each team
+model Roadmap {
+  id         String                @id @default(cuid())
+  name       String
+  slug       String
+  items      RoadmapItem[]
+  categories RoadmapItemCategory[]
+  team       Team                  @relation(fields: [teamId], references: [id])
+  teamId     String
+
+  @@unique([slug, teamId])
+}
+
+enum VisibilityType {
+  VISIBLE
+  HIDDEN
+  UNLISTED
+}
+
+model RoadmapItem {
+  id         String               @id @default(cuid())
+  name       String
+  slug       String
+  desc       String?
+  user       User?                @relation(fields: [userId], references: [id])
+  userId     String?
+  status     RoadmapStatusTypes   @default(Open)
+  roadmap    Roadmap              @relation(fields: [roadmapId], references: [id])
+  roadmapId  String
+  votes      RoadmapItemVote[]
+  comments   RoadmapItemComment[]
+  team       Team                 @relation(fields: [teamId], references: [id])
+  teamId     String
+  category   RoadmapItemCategory? @relation(fields: [roadmapItemCategoryId], references: [id])
+  createdAt  DateTime             @default(now())
+  updatedAt  DateTime             @default(now()) @updatedAt
+  visibility VisibilityType       @default(VISIBLE)
+  type       FeedbackType         @default(IDEA)
+
+  roadmapItemCategoryId String?
+
+  feedback Feedback[]
+
+  ChangelogEntry   ChangelogEntry? @relation(fields: [changelogEntryId], references: [id])
+  changelogEntryId String?
+
+
+  @@unique([slug, teamId, roadmapId])
+}
+
+enum IntegrationTypes {
+  INTERCOM
+  SLACK
+}
+
+model TeamIntegration {
+  id      String           @id @default(cuid())
+  service IntegrationTypes
+
+  intercomWorkspaceId String?
+  slackWorkspaceId    String?
+
+  data        Json?
+  accessToken String?
+  active      Boolean @default(true)
+
+  team   Team   @relation(fields: [teamId], references: [id])
+  teamId String
+}
+
+model TeamAPIKey {
+  id String @id @default(cuid())
+
+  name String
+
+  active Boolean @default(true)
+
+  team   Team   @relation(fields: [teamId], references: [id])
+  teamId String
+}
+
+model ChangelogLabel {
+  id               String          @id @default(cuid())
+  name             String
+  slug             String
+  team             Team            @relation(fields: [teamId], references: [id])
+  teamId           String
+  ChangelogEntry   ChangelogEntry? @relation(fields: [changelogEntryId], references: [id])
+  changelogEntryId String?
+
+  @@unique([slug, teamId])
+}
+
+enum ChangelogStatus {
+  DRAFT
+  PUBLISHED
+  SCHEDULED
+}
+
+enum ChangelogType {
+  FIX
+  ANNOUCEMENT
+  IMPROVEMENT
+}
+
+model ChangelogEntry {
+  id            String           @id @default(cuid())
+  title         String
+  slug          String
+  desc          String
+  status        ChangelogStatus  @default(DRAFT)
+  types         ChangelogType[]
+  team          Team             @relation(fields: [teamId], references: [id])
+  teamId        String
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @default(now()) @updatedAt
+  publishAt     DateTime?
+  labels        ChangelogLabel[]
+  linkedStories RoadmapItem[]
+
+
+  @@unique([slug, teamId])
+}
+
+// This should be considered a Company
+model Team {
+  id        String     @id @default(cuid())
+  name      String
+  subdomain String?    @unique @default(cuid())
+  feedbacks Feedback[]
+
+  roadmap             Roadmap[]
+  roadmapItem         RoadmapItem[]
+  RoadmapItemCategory RoadmapItemCategory[]
+
+  owner   User?   @relation("TeamOwner", fields: [ownerId], references: [id])
+  ownerId String?
+
+  contacts User[] @relation("TeamContacts")
+
+  admins User[] @relation("TeamAdmins")
+
+  services TeamIntegration[]
+
+  apiKeys TeamAPIKey[]
+
+  imageUrl         String?
+  changelogEntries ChangelogEntry[]
+  changelogLabels  ChangelogLabel[]
+}
+
+model RW_DataMigration {
+  version    String   @id
+  name       String
+  startedAt  DateTime
+  finishedAt DateTime
+}
