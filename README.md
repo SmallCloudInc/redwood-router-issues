@@ -57,7 +57,7 @@ Save the file and exit. (You may get a warning but asking to save as admin, proc
 Run `ipconfig /flushdns` in the Powershell terminal to allow the new host entries to be picked up by the OS.
 
 On windows, you should be able to access the admin app via `http://app.uservitals.local:8910/`
-and the public portal via `http://feedback.uservitals.local:8910/`
+and the public portal via `http://zipenterprises.uservitals.portal:8910/` or `http://cloudops.uservitals.portal:8910/`
 
 After the following changes, to access via the URLs above, you will need to run the dev server with `yarn rw dev --fwd="--disable-host-check=true"`
 
